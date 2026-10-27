@@ -5,7 +5,7 @@
 
 // Cambia la versión (v1 → v2) cada vez que modifiques el sitio:
 // así el "activate" borra la caché vieja y se descargan archivos nuevos.
-const VERSION = "v4";
+const VERSION = "v7";
 const C_BASE = `ia-base-${VERSION}`;       // archivos esenciales (precaché)
 const C_IMG  = `ia-imagenes-${VERSION}`;   // imágenes (cache first)
 const C_EXT  = `ia-externos-${VERSION}`;   // CDN, modelo de Teachable Machine
@@ -16,7 +16,7 @@ const MAX_IMAGENES = 80;                   // límite de imágenes guardadas
 // OJO: si falta UNO solo, addAll falla; por eso las fotos van por caché dinámica.
 const BASE = [
   "./", "./index.html", "./que-es-la-ia.html", "./glosario.html", "./aplicaciones.html",
-  "./ventajas-y-desafios.html", "./ia-y-educacion.html", "./galeria.html", "./reconocimiento.html",
+  "./ventajas-y-desafios.html", "./ia-y-educacion.html", "./galeria.html", "./reconocimiento.html", "./algoritmos-busqueda.html", "./js/algoritmos.js", "./js/datos-iniciales.js",
   "./offline.html", "./manifest.json", "./css/estilos.css", "./css/reconocimiento.css", "./css/galeria.css",
   "./js/main.js", "./js/modelo.js", "./js/galeria.js", "./imagenes/logo.png", "./imagenes/robot.png",
   "./imagenes/icons/icon-192.png", "./imagenes/icons/icon-512.png"
@@ -74,6 +74,18 @@ async function networkFirst(req) {
   }
 }
 
+// API de la base de datos: primero red (datos frescos); si no hay internet,
+// usa la última respuesta guardada para que la tabla siga viéndose offline.
+async function apiNetworkFirst(req) {
+  try {
+    const resp = await fetch(req);
+    if (resp.ok) (await caches.open(C_BASE)).put(req, resp.clone());
+    return resp;
+  } catch (_) {
+    return (await caches.match(req)) || new Response("[]", { status: 503, headers: { "Content-Type": "application/json" } });
+  }
+}
+
 // ESTRATEGIA C — STALE-WHILE-REVALIDATE (caché ya, y actualiza detrás).
 // Para: CSS, JS, librerías CDN y modelo de Teachable Machine.
 // Responde al instante con lo guardado y refresca la copia en segundo plano.
@@ -104,6 +116,8 @@ self.addEventListener("fetch", e => {
   const url = new URL(req.url);
 
   if (url.origin === location.origin) {
+    if (url.pathname.endsWith("/api/algoritmos.php"))
+      return e.respondWith(apiNetworkFirst(req));              // datos de la BD
     if (req.mode === "navigate" || req.destination === "document")
       return e.respondWith(networkFirst(req));                 // páginas
     if (req.destination === "image")
